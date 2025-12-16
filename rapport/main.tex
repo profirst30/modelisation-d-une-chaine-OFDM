@@ -1,0 +1,589 @@
+\section{Calcul du PAPR du signal OFDM}
+
+Dans cette première partie, nous avons modélisé l'émetteur OFDM et calculé le \textit{Peak-to-Average Power Ratio} (PAPR) du signal transmis.
+
+À partir des paramètres de simulation suivants :
+\begin{itemize}
+    \item taille de la FFT : $N_\text{FFT} = 64$,
+    \item modulation : $M$-QAM avec $M = 16$ (soit $\log_2(M) = 4$ bits par symbole),
+    \item nombre de symboles OFDM : $N_\text{symb} = 2^{12}$,
+    \item longueur du préfixe cyclique : $L = N_\text{FFT}/4$,
+\end{itemize}
+nous générons d'abord une suite binaire aléatoire $tMsgBin$ de longueur
+\[
+    N_\text{bit} = N_\text{FFT} \times \log_2(M) \times N_\text{symb},
+\]
+qui est ensuite mappée en symboles 16-QAM pour former le vecteur $tX$. Ce vecteur est réorganisé sous forme de matrice $tXmat$ de dimension $N_\text{FFT} \times N_\text{symb}$, chaque colonne représentant un symbole OFDM en fréquence.
+
+Pour passer dans le domaine temporel, on applique une transformée de Fourier inverse (IFFT) de taille $N_\text{FFT}$ sur chaque colonne de $tXmat$. Un préfixe cyclique de longueur $L$ est alors ajouté en recopiant les $L$ derniers échantillons de chaque symbole OFDM au début. L'ensemble des symboles OFDM ainsi formés est concaténé pour obtenir le signal $tx$.
+
+Ce signal est ensuite sur-échantillonné (facteur $8$) et filtré par un filtre en cosinus surélevé racine (Root Raised Cosine) de roll-off $\alpha = 0{,}3$, ce qui donne le signal transmis $tSignal$. C'est sur ce signal $tSignal$ que nous calculons le PAPR.
+
+Le PAPR est défini par :
+\[
+    \text{PAPR} = \frac{\displaystyle \max_n \left| x[n] \right|^2}{\displaystyle \mathbb{E}\left[\left| x[n] \right|^2\right]},
+\]
+où $x[n]$ représente les échantillons du signal transmis $tSignal$, et $\mathbb{E}[\cdot]$ l'espérance (moyenne) temporelle. En pratique, nous calculons :
+\[
+    \text{PAPR}_\text{lin} = \frac{\max_n \left| x[n] \right|^2}{\frac{1}{N} \sum_{n=0}^{N-1} \left| x[n] \right|^2},
+    \qquad
+    \text{PAPR}_\text{dB} = 10 \log_{10} \left( \text{PAPR}_\text{lin} \right).
+\]
+
+Le code correspondant est le suivant :
+\begin{verbatim}
+power_signal = np.abs(tSignal)**2
+papr_linear = np.max(power_signal) / np.mean(power_signal)
+papr_db = 10 * np.log10(papr_linear)
+\end{verbatim}
+
+Pour une réalisation donnée (suite binaire aléatoire particulière), nous obtenons typiquement :
+\[
+    \text{PAPR}_\text{lin} \approx 15{,}5 \quad \Rightarrow \quad
+    \text{PAPR}_\text{dB} \approx 11{,}9~\text{dB}.
+\]
+En répétant plusieurs simulations (avec différents tirages aléatoires de bits), le PAPR reste généralement compris entre $11$~dB et $12$~dB, ce qui est cohérent avec les valeurs attendues pour un signal OFDM de ce type.
+
+La figure~\ref{fig:spectre_tSignal} illustre le spectre du signal transmis $tSignal$ obtenu après filtrage en cosinus surélevé racine.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\linewidth]{chap1_question1.png}
+    \caption{Spectre du signal OFDM transmis $tSignal$ (après filtrage RRC).}
+    \label{fig:spectre_tSignal}
+\end{figure}
+
+
+\section{Variation du PAPR en fonction de la taille de FFT}
+
+Dans cette section, nous étudions l'influence de la taille de la FFT ($N_\text{FFT}$) sur le PAPR du signal OFDM. Nous faisons varier $N_\text{FFT}$ parmi les valeurs $\{16, 32, 64, 128, 256, 512\}$ en conservant les autres paramètres constants (modulation 16-QAM, $L = N_\text{FFT}/4$, sur-échantillonnage de facteur 8, filtre RRC avec $\alpha = 0{,}3$).
+
+Pour chaque valeur de $N_\text{FFT}$, nous calculons le PAPR linéaire du signal transmis $tSignal$ et le traçons en fonction de $\sqrt{3N_\text{FFT}}$. La figure~\ref{fig:papr_vs_sqrt3N} présente les résultats obtenus.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.85\linewidth]{chap1_question2.png}
+    \caption{PAPR linéaire en fonction de $\sqrt{3N}$ pour différentes tailles de FFT.}
+    \label{fig:papr_vs_sqrt3N}
+\end{figure}
+
+Le tableau~\ref{tab:papr_results} résume les valeurs numériques obtenues :
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+$N_\text{FFT}$ & $\sqrt{3N}$ & PAPR linéaire & Ratio PAPR$/\sqrt{3N}$ \\
+\hline
+16  & 6.93  & 11.53 & 1.66 \\
+32  & 9.80  & 13.65 & 1.39 \\
+64  & 13.86 & 14.22 & 1.03 \\
+128 & 19.60 & 15.94 & 0.81 \\
+256 & 27.71 & 16.66 & 0.60 \\
+512 & 39.19 & 16.65 & 0.42 \\
+\hline
+\end{tabular}
+\caption{PAPR linéaire pour différentes tailles de FFT.}
+\label{tab:papr_results}
+\end{table}
+
+\textbf{Observations :}
+\begin{itemize}
+    \item Pour les petites valeurs de $N_\text{FFT}$ (16, 32), le PAPR mesuré est \textit{supérieur} à $\sqrt{3N}$.
+    \item Pour $N_\text{FFT} = 64$, on observe une quasi-égalité : PAPR $\approx \sqrt{3N}$.
+    \item Pour les grandes valeurs ($N_\text{FFT} \geq 128$), le PAPR devient \textit{inférieur} à $\sqrt{3N}$ et semble saturer autour de 16--17, alors que $\sqrt{3N}$ continue de croître.
+\end{itemize}
+
+\textbf{Conclusion :}
+La relation théorique $\text{PAPR} \approx \sqrt{3N}$ n'est qu'une approximation valable sous certaines hypothèses (grand nombre de sous-porteuses, distribution gaussienne des échantillons). En pratique, le filtrage en cosinus surélevé racine et les effets statistiques limitent la croissance du PAPR, qui sature pour les grandes tailles de FFT. Ce comportement est cohérent avec les observations rapportées dans la littérature sur les systèmes OFDM réels.
+
+\section{Influence de l'ordre de modulation M-QAM sur le PAPR}
+
+Nous fixons maintenant la taille de la FFT à $N_\text{FFT} = 64$ et faisons varier l'ordre de la modulation M-QAM parmi les valeurs $\{4, 16, 64, 256, 1024\}$.
+
+\textbf{Remarque :} La bibliothèque \texttt{commpy} ne supporte que les modulations QAM ``carrées'' (où $M = 2^{2k}$), ce qui exclut les valeurs 8, 32, 128 et 512 demandées dans l'énoncé.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.85\linewidth]{chap1_question3.png}
+    \caption{PAPR linéaire en fonction de l'ordre de modulation M ($N_{FFT} = 64$).}
+    \label{fig:papr_vs_M}
+\end{figure}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+$M$ & Bits/symbole & PAPR linéaire & PAPR (dB) \\
+\hline
+4    & 2  & 12.77 & 11.06 \\
+16   & 4  & 14.02 & 11.47 \\
+64   & 6  & 16.10 & 12.07 \\
+256  & 8  & 14.69 & 11.67 \\
+1024 & 10 & 14.62 & 11.65 \\
+\hline
+\end{tabular}
+\caption{PAPR pour différents ordres de modulation M-QAM.}
+\label{tab:papr_vs_M}
+\end{table}
+
+\textbf{Observation :}
+Le PAPR reste \textit{quasi-constant} autour de 11--12~dB quel que soit l'ordre de modulation~$M$. Les légères variations observées sont dues aux fluctuations statistiques des tirages aléatoires de bits.
+
+\textbf{Explication :}
+Le PAPR d'un signal OFDM est principalement déterminé par la \textbf{superposition constructive des sous-porteuses} lors de l'IFFT, et non par la constellation M-QAM utilisée. L'ordre~$M$ influence la position des symboles dans le plan complexe (et donc le débit binaire), mais n'affecte pas la façon dont les sous-porteuses peuvent s'additionner en phase pour créer des pics de puissance.
+
+En conclusion, \textbf{le PAPR est indépendant de l'ordre de modulation M-QAM} et dépend essentiellement du nombre de sous-porteuses~$N$.
+
+\section{Vérification avec $N = 128$}
+
+Pour confirmer les observations de la question précédente, nous répétons l'étude en fixant $N_\text{FFT} = 128$ et en faisant varier l'ordre de modulation parmi $M \in \{4, 16, 64, 256, 1024\}$.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.85\linewidth]{chap1_question4.png}
+    \caption{PAPR linéaire en fonction de M ($N_{FFT} = 128$).}
+    \label{fig:papr_N128}
+\end{figure}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+$M$ & Bits/symbole & PAPR linéaire & PAPR (dB) \\
+\hline
+4    & 2  & 14.65 & 11.66 \\
+16   & 4  & 13.71 & 11.37 \\
+64   & 6  & 15.92 & 12.02 \\
+256  & 8  & 13.32 & 11.24 \\
+1024 & 10 & 13.69 & 11.36 \\
+\hline
+\multicolumn{2}{|c|}{\textbf{Moyenne}} & 14.26 & 11.54 \\
+\hline
+\end{tabular}
+\caption{PAPR pour différents ordres M-QAM avec $N = 128$.}
+\label{tab:papr_N128}
+\end{table}
+
+\textbf{Observations :}
+Avec $N = 128$, le PAPR reste stable autour de 11.5~dB avec un coefficient de variation de seulement 6.6\%, ce qui correspond aux fluctuations statistiques normales.
+
+\subsection*{Conclusion générale}
+
+Les résultats des questions 3 et 4 confirment que :
+\begin{enumerate}
+    \item Le \textbf{PAPR est indépendant de l'ordre de modulation} $M$-QAM. Que l'on utilise une 4-QAM ou une 1024-QAM, le PAPR reste sensiblement le même.
+    \item Le PAPR dépend \textbf{uniquement du nombre de sous-porteuses} $N$ (cf.\ question 2).
+\end{enumerate}
+
+Cela s'explique par le fait que le PAPR est déterminé par la superposition constructive des $N$ sous-porteuses lors de l'IFFT. La constellation M-QAM affecte uniquement l'amplitude et la phase de chaque sous-porteuse, mais pas la manière dont elles peuvent s'additionner en phase pour créer des pics de puissance instantanée.
+
+\section{Spectre du signal OFDM et bande occupée}
+
+Nous utilisons la fonction \texttt{plotSpectrum()} avec une fréquence d'échantillonnage unitaire ($f_s = 1$) pour tracer le spectre du signal transmis \texttt{tSignal}.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{chap1_question5.png}
+    \caption{Spectre du signal OFDM transmis avec mesure de la bande occupée.}
+    \label{fig:spectrum}
+\end{figure}
+
+\subsection*{Mesure de la bande occupée}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|l|c|}
+\hline
+Métrique & Valeur (Hz normalisé) \\
+\hline
+Bande à $-3$~dB & 0.117 \\
+Bande à $-20$~dB & 0.157 \\
+Bande théorique & 0.1625 \\
+\hline
+\end{tabular}
+\caption{Mesures de la bande occupée.}
+\end{table}
+
+\subsection*{Justification}
+
+La bande occupée par le signal OFDM est déterminée par le filtre en cosinus surélevé racine (RRC) appliqué après sur-échantillonnage. La formule théorique est :
+\[
+B = \frac{1 + \alpha}{\text{samples\_per\_symbol}}
+\]
+où $\alpha = 0{,}3$ est le facteur de roll-off et \texttt{samples\_per\_symbol} $= 8$ est le facteur de sur-échantillonnage.
+
+Application numérique :
+\[
+B = \frac{1 + 0{,}3}{8} = \frac{1{,}3}{8} = 0{,}1625~\text{Hz}
+\]
+
+Cette valeur théorique correspond bien à la bande mesurée à $-20$~dB sur le spectre (0.157~Hz). Le spectre présente la forme caractéristique d'un filtre en cosinus surélevé, avec une décroissance progressive au-delà de la fréquence de coupure principale.
+
+Le rôle du roll-off $\alpha$ est d'adoucir la transition entre la bande passante et la bande atténuée, ce qui réduit les interférences inter-symboles (ISI) au prix d'une légère augmentation de la bande occupée par rapport au cas idéal ($\alpha = 0$).
+
+\section{Passage en RF}
+
+\subsection{Expression du signal RF}
+
+Le signal en bande de base est représenté par son enveloppe complexe :
+\[
+\tilde{v}(t) = I(t) + j\,Q(t)
+\]
+où $I(t)$ est la composante en phase et $Q(t)$ la composante en quadrature.
+
+Le signal RF réel transmis s'obtient par modulation sur la porteuse de fréquence $f_c$ :
+\[
+s_{RF}(t) = \text{Re}\left\{ \tilde{v}(t) \cdot e^{j 2\pi f_c t} \right\}
+= I(t)\cos(2\pi f_c t) - Q(t)\sin(2\pi f_c t)
+\]
+
+\subsection{Génération et visualisation}
+
+Nous générons le signal RF avec une fréquence porteuse normalisée $f_c = 0{,}1$. La figure~\ref{fig:rf_signal} compare le signal RF avec l'enveloppe du signal en bande de base.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.95\linewidth]{chap1_question6_comparison.png}
+    \caption{Comparaison entre l'enveloppe $|\tilde{v}(t)|$ et le signal RF.}
+    \label{fig:rf_signal}
+\end{figure}
+
+On observe que le signal RF oscille à la fréquence $f_c$, et son amplitude instantanée est bornée par l'enveloppe $\pm|\tilde{v}(t)|$.
+
+\subsection{Comparaison des PAPR}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+Signal & PAPR linéaire & PAPR (dB) \\
+\hline
+Bande de base (complexe) & 13.64 & 11.35 \\
+RF (réel) & 24.44 & 13.88 \\
+\hline
+\textbf{Différence} & — & \textbf{+2.53 dB} \\
+\hline
+\end{tabular}
+\caption{Comparaison des PAPR en bande de base et en RF.}
+\end{table}
+
+\subsection*{Justification}
+
+Le PAPR du signal RF est environ 3~dB plus élevé que celui du signal en bande de base pour deux raisons :
+\begin{enumerate}
+    \item \textbf{Puissance moyenne réduite :} La puissance moyenne du signal RF est $\mathbb{E}[s_{RF}^2] = \frac{1}{2}\mathbb{E}[|\tilde{v}|^2]$, car $\mathbb{E}[\cos^2(\omega t)] = \mathbb{E}[\sin^2(\omega t)] = \frac{1}{2}$.
+    \item \textbf{Pic inchangé :} Le pic de puissance du signal RF atteint $\max|\tilde{v}(t)|^2$ lorsque la porteuse est en phase avec l'enveloppe.
+\end{enumerate}
+
+Par conséquent :
+\[
+\text{PAPR}_{RF} = \frac{\max(s_{RF}^2)}{\mathbb{E}[s_{RF}^2]} 
+\approx \frac{\max|\tilde{v}|^2}{\frac{1}{2}\mathbb{E}[|\tilde{v}|^2]}
+= 2 \times \text{PAPR}_{BB}
+\]
+
+En décibels : $\text{PAPR}_{RF}(\text{dB}) \approx \text{PAPR}_{BB}(\text{dB}) + 3~\text{dB}$, ce qui est confirmé par nos mesures ($\Delta = 2{,}53$~dB $\approx 3$~dB).
+
+\chapter{Chaîne de réception OFDM}
+
+\section{Implémentation du récepteur}
+
+Le récepteur OFDM est le dual de l'émetteur et réalise les opérations suivantes :
+\begin{enumerate}
+    \item Passage dans le canal AWGN avec un SNR de 30~dB (faible bruit)
+    \item Suppression du préfixe cyclique (CP)
+    \item Application de la FFT pour revenir dans le domaine fréquentiel
+    \item Démodulation M-QAM pour récupérer les bits
+\end{enumerate}
+
+\subsection{Vérification de la synchronisation}
+
+La figure~\ref{fig:sync} compare les parties réelles et imaginaires des signaux émis $tx$ et reçu $rx$. Les signaux sont parfaitement alignés (pas de retard).
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{chap2_sync_verification.png}
+    \caption{Comparaison des signaux émis et reçu (SNR = 30~dB).}
+    \label{fig:sync}
+\end{figure}
+
+\subsection{Constellations émise et reçue}
+
+La figure~\ref{fig:constellation} montre les constellations 16-QAM avant émission et après réception.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{chap2_constellation.png}
+    \caption{Constellations émise et reçue (SNR = 30~dB).}
+    \label{fig:constellation}
+\end{figure}
+
+À SNR = 30~dB, la constellation reçue est très proche de celle émise, avec un EVM de seulement 3.15\%.
+
+\section{Courbe TEB et EVM en fonction du SNR}
+
+Nous faisons varier le SNR de 2~dB à 16~dB avec un pas de 1~dB. Les résultats sont présentés sur la figure~\ref{fig:teb_snr}.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.95\linewidth]{chap2_teb_evm_vs_snr.png}
+    \caption{TEB et EVM en fonction du SNR.}
+    \label{fig:teb_snr}
+\end{figure}
+
+\textbf{Observations :}
+\begin{itemize}
+    \item Le TEB diminue de façon exponentielle avec l'augmentation du SNR
+    \item L'EVM diminue linéairement avec le SNR
+    \item À SNR $\approx$ 16~dB, le TEB atteint $\sim 10^{-3}$
+    \item La chaîne OFDM complète fonctionne correctement
+\end{itemize}
+
+\chapter{Chaîne de réception OFDM}
+
+\section{Implémentation du récepteur}
+
+Le récepteur OFDM est le dual de l'émetteur et réalise les opérations suivantes :
+\begin{enumerate}
+    \item Passage dans le canal AWGN avec un SNR de 30~dB (faible bruit)
+    \item Suppression du préfixe cyclique (CP)
+    \item Application de la FFT pour revenir dans le domaine fréquentiel
+    \item Démodulation M-QAM pour récupérer les bits
+\end{enumerate}
+
+\subsection{Vérification de la synchronisation}
+
+La figure~\ref{fig:sync} compare les parties réelles et imaginaires des signaux émis $tx$ et reçu $rx$. Les signaux sont parfaitement alignés (pas de retard).
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{chap2_sync_verification.png}
+    \caption{Comparaison des signaux émis et reçu (SNR = 30~dB).}
+    \label{fig:sync}
+\end{figure}
+
+\subsection{Constellations émise et reçue}
+
+La figure~\ref{fig:constellation} montre les constellations 16-QAM avant émission et après réception.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{chap2_constellation.png}
+    \caption{Constellations émise et reçue (SNR = 30~dB).}
+    \label{fig:constellation}
+\end{figure}
+
+À SNR = 30~dB, la constellation reçue est très proche de celle émise, avec un EVM de seulement 3.15\%.
+
+\section{Courbe TEB et EVM en fonction du SNR}
+
+Nous faisons varier le SNR de 2~dB à 16~dB avec un pas de 1~dB. Les résultats sont présentés sur la figure~\ref{fig:teb_snr}.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.95\linewidth]{chap2_teb_evm_vs_snr.png}
+    \caption{TEB et EVM en fonction du SNR.}
+    \label{fig:teb_snr}
+\end{figure}
+
+\textbf{Observations :}
+\begin{itemize}
+    \item Le TEB diminue de façon exponentielle avec l'augmentation du SNR
+    \item L'EVM diminue linéairement avec le SNR
+    \item À SNR $\approx$ 16~dB, le TEB atteint $\sim 10^{-3}$
+    \item La chaîne OFDM complète fonctionne correctement
+\end{itemize}
+
+\section{EVM en fonction du SNR}
+
+\subsection{Question 4 : Courbe EVM pour 16-QAM}
+
+Nous traçons l'EVM en fonction du SNR pour une modulation 16-QAM, avec le SNR variant de 2~dB à 16~dB.
+
+\subsection{Question 5 : Comparaison avec 256-QAM}
+
+Nous répétons l'étude pour une modulation 256-QAM et superposons les deux courbes.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{chap2_evm_vs_snr_16_256.png}
+    \caption{EVM en fonction du SNR pour 16-QAM et 256-QAM.}
+    \label{fig:evm_vs_snr}
+\end{figure}
+
+\textbf{Observation principale :} Les courbes d'EVM pour 16-QAM et 256-QAM sont \textbf{parfaitement superposées}. L'EVM est indépendant de l'ordre de modulation.
+
+\subsection*{Justification}
+
+L'EVM mesure l'erreur relative entre le symbole reçu et le symbole idéal :
+\[
+\text{EVM} = \frac{\text{RMS}_\text{erreur}}{\text{RMS}_\text{signal}}
+\]
+
+Dans un canal AWGN avec un SNR donné, la variance du bruit est $\sigma^2 = P_s / \text{SNR}$, donc :
+\[
+\text{EVM} = \frac{\sqrt{P_s/\text{SNR}}}{\sqrt{P_s}} = \frac{1}{\sqrt{\text{SNR}}} = \frac{100\%}{\sqrt{\text{SNR}_\text{linéaire}}}
+\]
+
+Cette formule \textbf{ne dépend pas de l'ordre de modulation} $M$ ! L'EVM caractérise uniquement la qualité du canal (le SNR), pas la constellation utilisée.
+
+\subsection*{Pourquoi le TEB est-il différent alors ?}
+
+Bien que l'EVM soit identique, le TEB diffère significativement :
+\begin{itemize}
+    \item À SNR = 16~dB : TEB$_{16\text{-QAM}} \approx 1{,}8 \times 10^{-3}$ vs TEB$_{256\text{-QAM}} \approx 1{,}2 \times 10^{-1}$
+\end{itemize}
+
+\textbf{Explication :} Plus l'ordre $M$ est élevé, plus les symboles sont proches dans la constellation. Une même erreur (même EVM) provoque davantage de décodages erronés car la distance minimale entre symboles diminue :
+\begin{itemize}
+    \item 16-QAM : distance minimale = $d$
+    \item 256-QAM : distance minimale $\approx d/4$
+\end{itemize}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{chap2_teb_vs_snr_16_256.png}
+    \caption{TEB en fonction du SNR pour 16-QAM et 256-QAM.}
+    \label{fig:teb_vs_snr_16_256}
+\end{figure}
+
+\textbf{Conclusion :}
+\begin{itemize}
+    \item L'\textbf{EVM} est une mesure de la \textbf{qualité du canal} (SNR) — indépendant de $M$
+    \item Le \textbf{TEB} dépend à la fois du canal ET de la modulation
+\end{itemize}
+
+\section{Partie Bonus : Canal de Rayleigh}
+
+\subsection{Canal sélectif en fréquence}
+
+Dans cette partie, nous étudions le comportement de l'OFDM dans un canal de Rayleigh multi-trajets, plus réaliste que le canal AWGN. Le canal est modélisé par une réponse impulsionnelle de longueur $L_{canal} = 8$ échantillons.
+
+\subsubsection{Modèle du canal}
+
+Le canal de Rayleigh est caractérisé par :
+\begin{itemize}
+    \item Une réponse impulsionnelle $h[n]$ de $L_{canal}$ coefficients complexes gaussiens
+    \item Une réponse fréquentielle $H[k] = \text{FFT}(h, N_{FFT})$
+    \item Des évanouissements (fading) sélectifs en fréquence
+\end{itemize}
+
+L'égalisation Zero-Forcing (ZF) compense le canal en divisant les symboles reçus par la réponse fréquentielle :
+\begin{equation}
+\hat{X}[k] = \frac{Y[k]}{H[k]}
+\end{equation}
+
+\subsection{Comparaison AWGN vs Rayleigh}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{bonus_awgn_vs_rayleigh.png}
+    \caption{Comparaison des performances EVM et TEB entre canal AWGN et Rayleigh}
+    \label{fig:bonus_rayleigh}
+\end{figure}
+
+\textbf{Observations :}
+\begin{itemize}
+    \item \textbf{Sans égalisation} : Le canal Rayleigh dégrade complètement les performances (TEB $\approx$ 50\%)
+    \item \textbf{Avec égalisation ZF} : Les performances sont partiellement récupérées, mais restent inférieures au canal AWGN
+    \item L'égaliseur ZF amplifie le bruit sur les sous-porteuses où $|H[k]|$ est faible (fading profond)
+\end{itemize}
+
+\subsection{Rôle du préfixe cyclique (CP)}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{bonus_variation_cp.png}
+    \caption{Effet de la longueur du préfixe cyclique sur les performances (SNR = 30 dB)}
+    \label{fig:bonus_cp}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        \textbf{L (CP)} & \textbf{EVM (\%)} & \textbf{TEB} & \textbf{Commentaire} \\
+        \hline
+        0 & 56.0 & $9.4 \times 10^{-2}$ & ISI fort \\
+        2 & 41.7 & $5.5 \times 10^{-2}$ & ISI \\
+        4 & 24.1 & $2.3 \times 10^{-2}$ & ISI \\
+        \textbf{8} & \textbf{11.1} & $\mathbf{4.7 \times 10^{-3}}$ & \textbf{L = L$_{canal}$} \\
+        16 & 11.2 & $4.5 \times 10^{-3}$ & OK \\
+        \hline
+    \end{tabular}
+    \caption{Effet de la longueur du CP sur les performances (avec égalisation ZF)}
+\end{table}
+
+\textbf{Conclusion sur le préfixe cyclique :}
+\begin{itemize}
+    \item Le CP doit être \textbf{au moins égal} à la longueur du canal $L_{canal}$
+    \item Si $L_{CP} < L_{canal}$ : Interférence Inter-Symboles (ISI) $\rightarrow$ dégradation des performances
+    \item Si $L_{CP} \geq L_{canal}$ : Le CP absorbe l'ISI, performances optimales
+    \item Augmenter $L_{CP}$ au-delà de $L_{canal}$ n'améliore plus les performances mais réduit l'efficacité spectrale
+\end{itemize}
+
+\textbf{Compromis pratique :}
+\begin{equation}
+\eta = \frac{N_{FFT}}{N_{FFT} + L_{CP}}
+\end{equation}
+
+Avec $N_{FFT} = 64$ et $L_{CP} = 16$ : $\eta = \frac{64}{80} = 80\%$ d'efficacité spectrale.
+
+En pratique (WiFi, LTE), on choisit $L_{CP} \approx N_{FFT}/4$ pour un bon compromis entre protection contre l'ISI et efficacité spectrale.
+
+%===============================================================================
+\section*{Conclusion générale}
+%===============================================================================
+
+Ce travail pratique nous a permis d'appréhender de manière complète le fonctionnement d'une chaîne de transmission OFDM, de l'émission à la réception, en passant par la modélisation du canal.
+
+\subsection*{Synthèse des résultats}
+
+\textbf{Côté émission :}
+\begin{itemize}
+    \item Le PAPR du signal OFDM est de l'ordre de \textbf{11-12 dB}, ce qui représente un défi majeur pour les amplificateurs de puissance.
+    \item Le PAPR est \textbf{quasi-indépendant} de l'ordre de modulation M-QAM : passer de 4-QAM à 1024-QAM ne modifie pas significativement le PAPR.
+    \item La relation théorique $\text{PAPR} \approx \sqrt{3N}$ n'est qu'une approximation : en pratique, le PAPR sature autour de 16-17 en linéaire pour les grandes tailles de FFT.
+    \item Le passage en bande RF ajoute environ \textbf{3 dB} au PAPR en raison de la modulation sur porteuse.
+\end{itemize}
+
+\textbf{Côté réception :}
+\begin{itemize}
+    \item L'EVM diminue linéairement avec le SNR (en échelle dB) et est \textbf{indépendant} de l'ordre de modulation.
+    \item Le TEB diminue avec le SNR mais dépend fortement de l'ordre de modulation : les modulations d'ordre élevé (64-QAM) nécessitent un SNR plus important que les modulations simples (4-QAM) pour atteindre un même TEB.
+    \item La bande passante du signal est déterminée par le facteur de roll-off $\alpha$ : $B \approx (1+\alpha)/T_s$.
+\end{itemize}
+
+\textbf{Canal de Rayleigh (Bonus) :}
+\begin{itemize}
+    \item Le canal multi-trajets introduit des évanouissements sélectifs en fréquence qui dégradent fortement les performances sans égalisation.
+    \item L'égalisation Zero-Forcing (ZF) permet de compenser le canal, mais amplifie le bruit sur les sous-porteuses en fading profond.
+    \item Le préfixe cyclique joue un rôle crucial : il doit être \textbf{au moins égal} à la longueur de la réponse impulsionnelle du canal pour éviter l'ISI.
+\end{itemize}
+
+\subsection*{Points clés de l'OFDM}
+
+L'OFDM présente plusieurs avantages qui expliquent son adoption massive dans les systèmes modernes (WiFi, LTE, 5G, DVB-T) :
+\begin{enumerate}
+    \item \textbf{Robustesse aux canaux multi-trajets} : grâce au préfixe cyclique, l'OFDM transforme un canal sélectif en fréquence en $N$ sous-canaux plats, facilitant l'égalisation.
+    \item \textbf{Efficacité spectrale} : les sous-porteuses orthogonales permettent un chevauchement spectral sans interférence.
+    \item \textbf{Implémentation efficace} : l'utilisation de la FFT/IFFT permet une réalisation numérique peu coûteuse.
+\end{enumerate}
+
+Cependant, l'OFDM présente aussi des inconvénients :
+\begin{enumerate}
+    \item \textbf{PAPR élevé} : nécessite des amplificateurs linéaires sur une large plage dynamique ou des techniques de réduction du PAPR.
+    \item \textbf{Sensibilité aux décalages fréquentiels} : un offset de fréquence entre émetteur et récepteur détruit l'orthogonalité des sous-porteuses.
+    \item \textbf{Overhead du préfixe cyclique} : réduit l'efficacité spectrale d'un facteur $N/(N+L)$.
+\end{enumerate}
+
+\subsection*{Perspectives}
+
+Ce TP a posé les bases de la compréhension de l'OFDM. Des extensions possibles incluent :
+\begin{itemize}
+    \item L'étude de techniques de réduction du PAPR (clipping, codage, SLM, PTS)
+    \item L'implémentation d'égaliseurs plus performants (MMSE) moins sensibles au bruit
+    \item L'ajout de codage canal (codes convolutifs, turbo-codes, LDPC) pour améliorer les performances en TEB
+    \item L'étude de l'OFDMA (accès multiple) utilisé en LTE/5G
+\end{itemize}
