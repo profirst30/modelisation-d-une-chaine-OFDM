@@ -49,17 +49,11 @@ cd modelisation-d-une-chaine-OFDM
 2. **Créer un environnement virtuel**
 ```bash
 python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# Linux/Mac
-source .venv/bin/activate
 ```
 
 3. **Installer les dépendances**
 ```bash
-pip install numpy matplotlib scipy scikit-commpy
+pip install requirments.txt
 ```
 
 ## 📂 Structure du Projet
