@@ -53,7 +53,7 @@ python -m venv .venv
 
 3. **Installer les dépendances**
 ```bash
-pip install requirments.txt
+pip install -r requirements.txt
 ```
 
 ## 📂 Structure du Projet
